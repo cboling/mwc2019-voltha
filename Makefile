@@ -79,12 +79,9 @@ DOCKER_IMAGE_LIST = \
 	grafana \
 	onos \
 	unum \
-	ponsim \
 	tester \
 	config-push \
-	j2 \
-	alarm-generator \
-	test_runner
+	j2
 
 # The following list was scavanged from the compose / stack files as well as
 # from the Dockerfiles. If nothing else it highlights that VOLTHA is not
@@ -328,7 +325,7 @@ grafana:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-grafana:${TAG} -f docker/Dockerfile.grafana .
 
 onos:
-	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-onos:${TAG} -f docker/Dockerfile.onos docker
+	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-mwc-2019-onos:${TAG} -f docker/Dockerfile.onos docker
 
 unum:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-unum:${TAG} -f unum/Dockerfile ./unum

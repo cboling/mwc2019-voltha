@@ -14,7 +14,7 @@
 # limitations under the License.
 
 HERE=$(pwd)
-OARS=$(find $DOWNLOAD_ROOT -name "*.oar")
+OARS=$(find $DOWNLOAD_ROOT -name "ctpd-olt-app-*.oar")
 for oar in $OARS; do
     cd $HERE
     echo "Installing application '$oar'"
