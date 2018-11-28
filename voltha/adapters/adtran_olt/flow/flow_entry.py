@@ -89,6 +89,7 @@ class FlowEntry(object):
         self._logical_port = None    # Currently ONU VID is logical port if not doing xPON
         self._is_multicast = False
         self._is_acl_flow = False
+        self._bandwidth = None
 
         # A value used to locate possible related flow entries
         self.signature = None
@@ -139,6 +140,11 @@ class FlowEntry(object):
     @property
     def device_id(self):
         return self.handler.device_id
+
+    @property
+    def bandwidth(self):
+        """ Bandwidth in Mbps (if any) """
+        return self._bandwidth
 
     @property
     def flow_direction(self):
@@ -479,19 +485,36 @@ class FlowEntry(object):
                 self.udp_src = field.udp_src
 
             elif field.type == METADATA:
-                log.debug('*** field.type == METADATA', value=field.table_metadata)
+                if self._handler.is_nni_port(self.in_port):
+                    # Downstream flow
+                    from voltha.protos import openflow_13_pb2 as ofp
+                    log.debug('*** field.type == METADATA', value=field.table_metadata)
 
-                if 0xFFFFFFFF >= field.table_metadata > ofp.OFPVID_PRESENT + 4095:
-                    # Default flows for old-style controller flows
-                    self.inner_vid = None
+                    if 0xFFFFFFFF >= field.table_metadata > ofp.OFPVID_PRESENT + 4095:
+                        # Default flows for old-style controller flows
+                        self.inner_vid = None
 
-                elif field.table_metadata > 0xFFFFFFFF:
-                    # ONOS v1.13.5 or later. c-vid in upper 32-bits
-                    self.inner_vid = field.table_metadata >> 32
+                    elif field.table_metadata > 0xFFFFFFFF:
+                        # ONOS v1.13.5 or later. c-vid in upper 32-bits
+                        # For Telefonica, any upstream bandwidth in upper 20-bits
+                        metadata = field.table_metadata >> 32
+
+                        self.inner_vid = metadata & 0x0FFF
+                        bandwidth = metadata >> 12
+                        if bandwidth > 0:
+                            self._bandwidth = bandwidth
+                            log.info('downstream-bandwidth', bandwidth=self._bandwidth)
+
+                    else:
+                        # Pre- ONOS v1.13.5
+                        self.inner_vid = field.table_metadata
 
                 else:
-                    # Pre- ONOS v1.13.5
-                    self.inner_vid = field.table_metadata
+                    # Upstream flow
+                    # Telefonica bandwidth is in the metadata (if any)
+                    if field.table_metadata > 0:
+                        self._bandwidth = field.table_metadata
+                        log.info('upstream-bandwidth', bandwidth=self._bandwidth)
 
                 log.debug('*** field.type == METADATA', value=field.table_metadata,
                           inner_vid=self.inner_vid)
