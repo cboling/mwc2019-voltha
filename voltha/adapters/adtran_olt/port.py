@@ -216,15 +216,11 @@ class AdtnPort(object):
 
             self.state = AdtnPort.State.STOPPED
 
-            self.sync_deferred = reactor.callLater(self.sync_tick,
-                                                   self.sync_hardware)
-
             self.deferred = self.finish_stop()
             yield self.deferred
 
         except Exception as e:
             self.log.exception('stop-failed', e=e)
-            raise
 
         returnValue('Stopped')
 
