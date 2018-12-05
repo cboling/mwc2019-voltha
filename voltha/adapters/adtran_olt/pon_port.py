@@ -927,8 +927,9 @@ class PonPort(AdtnPort):
                 self.log.debug('onu-remove', serial_number=onu.serial_number, e=e)
 
         # Remove from LOS list if needed
-        if onu.id in self._active_los_alarms:
-            self._active_los_alarms.remove(onu.id)
+        if onu is not None:
+	    if onu.id in self._active_los_alarms:
+                self._active_los_alarms.remove(onu.id)
 
     def add_mcast_gem_port(self, mcast_gem, vlan):
         """
