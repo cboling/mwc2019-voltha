@@ -224,8 +224,10 @@ class AdtnPort(object):
 
         returnValue('Stopped')
 
+    @inlineCallbacks
     def finish_stop(self):
         pass   # Add to your derived class if needed
+        returnValue(None)
 
     def restart(self):
         if self.state == AdtnPort.State.RUNNING or self.state == AdtnPort.State.STOPPED:

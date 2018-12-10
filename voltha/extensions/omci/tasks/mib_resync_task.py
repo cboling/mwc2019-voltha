@@ -285,6 +285,7 @@ class MibResyncTask(Task):
                 except Exception as e:
                     self.log.exception('resync', e=e, seq_no=seq_no,
                                        number_of_commands=number_of_commands)
+                    raise
 
         returnValue(seq_no + 1)     # seq_no is zero based.
 

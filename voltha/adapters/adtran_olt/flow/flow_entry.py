@@ -487,7 +487,6 @@ class FlowEntry(object):
             elif field.type == METADATA:
                 if self._handler.is_nni_port(self.in_port):
                     # Downstream flow
-                    from voltha.protos import openflow_13_pb2 as ofp
                     log.debug('*** field.type == METADATA', value=field.table_metadata)
 
                     if 0xFFFFFFFF >= field.table_metadata > OFPVID_PRESENT + 4095:
