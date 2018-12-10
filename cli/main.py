@@ -605,45 +605,22 @@ class TestCli(VolthaCli):
         Install all flows that are representative of the virtualized access
         scenario in a PON network.
         """
+
+        self.poutput('inside install sample flows')
         logical_device_id = line or self.default_logical_device_id
 
         # gather NNI and UNI port IDs
         nni_port_no, unis = self.get_logical_ports(logical_device_id)
 
+        self.poutput('inside for {} {} {} '.format(nni_port_no, unis, logical_device_id))
+
         # construct and push flow rules
         stub = self.get_stub()
 
         for uni_port_no, c_vid in unis:
-            # Controller-bound flows
-            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
-                id=logical_device_id,
-                flow_mod=mk_simple_flow_mod(
-                    priority=2000,
-                    match_fields=[in_port(uni_port_no), eth_type(0x888e)],
-                    actions=[
-                        # push_vlan(0x8100),
-                        # set_field(vlan_vid(4096 + 4000)),
-                        output(ofp.OFPP_CONTROLLER)
-                    ]
-                )
-            ))
-            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
-                id=logical_device_id,
-                flow_mod=mk_simple_flow_mod(
-                    priority=1000,
-                    match_fields=[eth_type(0x800), ip_proto(2)],
-                    actions=[output(ofp.OFPP_CONTROLLER)]
-                )
-            ))
-            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
-                id=logical_device_id,
-                flow_mod=mk_simple_flow_mod(
-                    priority=1000,
-                    match_fields=[eth_type(0x800), ip_proto(17), udp_dst(67)],
-                    actions=[output(ofp.OFPP_CONTROLLER)]
-                )
-            ))
-
+            self.poutput('inside for {} {}'.format(uni_port_no, c_vid))
+            meta_data = 600 << 44 | 4 << 32 | uni_port_no
+            self.poutput('meta_data {:x}'.format(meta_data))
             # Unicast flows:
             # Downstream flow 1
             stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
@@ -652,8 +629,8 @@ class TestCli(VolthaCli):
                     priority=500,
                     match_fields=[
                         in_port(nni_port_no),
-                        vlan_vid(4096 + 1000),
-                        metadata(c_vid)  # here to mimic an ONOS artifact
+                        vlan_vid(4096 + 9),
+                        metadata(600 << 44 | 4 << 32 | uni_port_no)
                     ],
                     actions=[pop_vlan()],
                     next_table_id=1
@@ -665,7 +642,7 @@ class TestCli(VolthaCli):
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
                     table_id=1,
-                    match_fields=[in_port(nni_port_no), vlan_vid(4096 + c_vid)],
+                    match_fields=[in_port(nni_port_no), vlan_vid(4096 + 4)],
                     actions=[set_field(vlan_vid(4096 + 0)), output(uni_port_no)]
                 )
             ))
@@ -674,9 +651,77 @@ class TestCli(VolthaCli):
                 id=logical_device_id,
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
-                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + 0)],
-                    actions=[set_field(vlan_vid(4096 + c_vid))],
+                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + 0), metadata(65)],
+                    actions=[set_field(vlan_vid(4096 + 4))],
                     next_table_id=1
+                )
+            ))
+
+            # Upstream flow 2 for s-tag
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=500,
+                    table_id=1,
+                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + 4), metadata(65)],
+                    actions=[
+                        push_vlan(0x8100),
+                        set_field(vlan_vid(4096 + 9)),
+                        output(nni_port_no)
+                    ]
+                )
+            ))
+
+        self.poutput('success')
+
+    complete_install_all_sample_flows = VolthaCli.complete_logical_device
+
+
+    
+    def do_install_all_att_flows(self, line):
+        """
+        Install all flows that are representative of the virtualized access
+        scenario in a PON network.
+        """
+
+        self.poutput('inside install sample flows')
+        logical_device_id = line or self.default_logical_device_id
+    
+        # gather NNI and UNI port IDs
+        nni_port_no, unis = self.get_logical_ports(logical_device_id)
+    
+        self.poutput('inside for {} {} {} '.format(nni_port_no, unis, logical_device_id))
+    
+        # construct and push flow rules
+        stub = self.get_stub()
+        s_vid = 9
+        c_vid = 2
+    
+        for uni_port_no, c_vid in unis:
+            self.poutput('inside for {} {}'.format(uni_port_no, c_vid))
+            # Unicast flows:
+            # Downstream flow 1
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=500,
+                    match_fields=[
+                        in_port(nni_port_no),
+                        vlan_vid(4096 + s_vid),
+                        metadata(c_vid << 32 | uni_port_no)
+                    ],
+                    actions=[pop_vlan()],
+                    next_table_id=1
+                )
+            ))
+            # Downstream flow 2
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=500,
+                    table_id=1,
+                    match_fields=[in_port(nni_port_no), vlan_vid(4096 + 2)],
+                    actions=[pop_vlan(), output(uni_port_no)]
                 )
             ))
             # Upstream flow 1 for untagged case
@@ -685,100 +730,26 @@ class TestCli(VolthaCli):
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
                     match_fields=[in_port(uni_port_no), vlan_vid(0)],
-                    actions=[push_vlan(0x8100), set_field(vlan_vid(4096 + c_vid))],
+                    actions=[push_vlan(0x8100), set_field(vlan_vid(4096 + 2))],
                     next_table_id=1
                 )
             ))
+    
             # Upstream flow 2 for s-tag
             stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
                 id=logical_device_id,
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
                     table_id=1,
-                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + c_vid)],
+                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + 2)],
                     actions=[
                         push_vlan(0x8100),
-                        set_field(vlan_vid(4096 + 1000)),
+                        set_field(vlan_vid(4096 + s_vid)),
                         output(nni_port_no)
                     ]
                 )
             ))
-
-        # Push a few multicast flows
-        # 1st with one bucket for our uni 0
-        stub.UpdateLogicalDeviceFlowGroupTable(FlowGroupTableUpdate(
-            id=logical_device_id,
-            group_mod=mk_multicast_group_mod(
-                group_id=1,
-                buckets=[
-                    ofp.ofp_bucket(actions=[
-                        pop_vlan(),
-                        output(unis[0][0])
-                    ])
-                ]
-            )
-        ))
-        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
-            id=logical_device_id,
-            flow_mod=mk_simple_flow_mod(
-                priority=1000,
-                match_fields=[
-                    in_port(nni_port_no),
-                    eth_type(0x800),
-                    vlan_vid(4096 + 140),
-                    ipv4_dst(0xe4010101)
-                ],
-                actions=[group(1)]
-            )
-        ))
-
-        # 2nd with one bucket for uni 0 and 1
-        stub.UpdateLogicalDeviceFlowGroupTable(FlowGroupTableUpdate(
-            id=logical_device_id,
-            group_mod=mk_multicast_group_mod(
-                group_id=2,
-                buckets=[
-                    ofp.ofp_bucket(actions=[pop_vlan(), output(unis[0][0])])
-                    #                    ofp.ofp_bucket(actions=[pop_vlan(), output(unis[1][0])])
-                ]
-            )
-        ))
-        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
-            id=logical_device_id,
-            flow_mod=mk_simple_flow_mod(
-                priority=1000,
-                match_fields=[
-                    in_port(nni_port_no),
-                    eth_type(0x800),
-                    vlan_vid(4096 + 140),
-                    ipv4_dst(0xe4020202)
-                ],
-                actions=[group(2)]
-            )
-        ))
-
-        # 3rd with empty bucket
-        stub.UpdateLogicalDeviceFlowGroupTable(FlowGroupTableUpdate(
-            id=logical_device_id,
-            group_mod=mk_multicast_group_mod(
-                group_id=3,
-                buckets=[]
-            )
-        ))
-        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
-            id=logical_device_id,
-            flow_mod=mk_simple_flow_mod(
-                priority=1000,
-                match_fields=[
-                    in_port(nni_port_no),
-                    eth_type(0x800),
-                    vlan_vid(4096 + 140),
-                    ipv4_dst(0xe4030303)
-                ],
-                actions=[group(3)]
-            )
-        ))
-
+    
         self.poutput('success')
 
     complete_install_all_sample_flows = VolthaCli.complete_logical_device
