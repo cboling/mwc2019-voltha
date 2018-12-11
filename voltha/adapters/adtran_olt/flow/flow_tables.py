@@ -62,7 +62,7 @@ class DeviceFlows(object):
 
     def remove(self, item):
         flow_id = item.flow_id if isinstance(item, FlowEntry) else item
-        return self._flow_table.pop(flow_id, default=None)
+        return self._flow_table.pop(flow_id)
 
     def clear_all(self):
         self._flow_table = dict()

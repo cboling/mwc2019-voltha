@@ -693,7 +693,7 @@ class FlowEntry(object):
             sig_table = self._handler.downstream_flows.get(self.signature)
             flow_table = sig_table.flows if sig_table is not None else None
 
-        if flow_table is None or flow_id not in flow_table:
+        if flow_table is None or flow_id not in flow_table.keys():
             returnValue('NOP')
 
         # Remove from flow table and clean up flow table if empty
