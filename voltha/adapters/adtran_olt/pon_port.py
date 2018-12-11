@@ -93,6 +93,7 @@ class PonPort(AdtnPort):
         self._ont_anis = {}               # Name -> dict
         self._tconts = {}                 # Name -> dict
         self._gem_ports = {}              # Name -> dict
+        self._traffic_descriptors = {}    # Name -> dict
 
     def __str__(self):
         return "PonPort-{}: Admin: {}, Oper: {}, OLT: {}".format(self._label,
@@ -917,6 +918,7 @@ class PonPort(AdtnPort):
 
                 tcont_name = 'tcont-{}-{}-data'.format(self.pon_id, onu_id)
                 self._tconts.pop(tcont_name, None)
+                self._traffic_descriptors.pop(tcont_name, None)
 
                 gem_ids = {gem_port.gem_id for gem_port in onu.gem_ports}
                 for gem_id in gem_ids:
@@ -974,6 +976,10 @@ class PonPort(AdtnPort):
     def gem_ports(self):
         return self._gem_ports
 
+    @property
+    def traffic_descriptors(self):
+        return self._traffic_descriptors
+
     def get_device_profile_info(self, serial_number):
         vont_ani_info = next((info for _, info in self._v_ont_anis.items()
                              if info.get('expected-serial-number') == serial_number), None)
@@ -1008,10 +1014,12 @@ class PonPort(AdtnPort):
             self._v_ont_anis[name] = vont_ani_info
             self._ont_anis[name] = ont_ani_info
 
-            tcont, tc, td = self.create_xpon_tcont(onu_id)
+            tcont, tc, _ = self.create_xpon_tcont(onu_id)
+            self._traffic_descriptors[tcont.name] = OltTrafficDescriptor.create(tc['td-ref'])
+
             from xpon.olt_tcont import OltTCont
             tc['object'] = OltTCont.create(tc,
-                                           OltTrafficDescriptor.create(tc['td-ref']),
+                                           self._traffic_descriptors[tcont.name],
                                            self.pon_id, onu_id)
             self._tconts[tcont.name] = tc['object']
             tconts.append(tc)
@@ -1055,10 +1063,10 @@ class PonPort(AdtnPort):
         tcont.alloc_id = self._parent.resource_mgr.get_alloc_id(pon_intf_onu_id)
         # TODO: Add release of alloc_id on ONU delete and/or TCONT delete
 
-        traffic_desc = TrafficDescriptorProfileData(name='BestEffort',
+        traffic_desc = TrafficDescriptorProfileData(name=tcont.name,
                                                     fixed_bandwidth=0,
                                                     assured_bandwidth=0,
-                                                    maximum_bandwidth=10000000000,
+                                                    maximum_bandwidth=10000000,
                                                     priority=0,
                                                     weight=0,
                                                     additional_bw_eligibility_indicator=0)

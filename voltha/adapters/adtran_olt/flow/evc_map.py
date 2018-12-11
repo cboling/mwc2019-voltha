@@ -87,6 +87,7 @@ class EVCMap(object):
         self._evc_connection = EVCMap.EvcConnection.DEFAULT
         self._men_priority = EVCMap.PriorityOption.DEFAULT
         self._men_pri = 0  # If Explicit Priority
+        self._upstream_bandwidth = None
 
         self._c_tag = None
         self._men_ctag_priority = EVCMap.PriorityOption.DEFAULT
@@ -344,6 +345,15 @@ class EVCMap(object):
                 self._installed = True
                 try:
                     self._cancel_deferred()
+
+                    log.info('upstream-bandwidth')
+                    try:
+                        yield self.update_flow_bandwidth()
+
+                    except Exception as e:
+                        log.exception('upstream-bandwidth-failed', name=self.name, e=e)
+                        raise
+
                     map_xml = self._ingress_install_xml(self._gem_ids_and_vid, work_acls.values(),
                                                         not is_installed) \
                         if self._is_ingress_map else self._egress_install_xml()
@@ -628,6 +638,41 @@ class EVCMap(object):
         return {'ingress-port': items[1],
                 'flow-id': items[2].split('.')[0]} if len(items) > 2 else dict()
 
+    @inlineCallbacks
+    def update_flow_bandwidth(self):
+        # all flows should should be on the same PON
+        flow = self._flows.itervalues().next()
+        is_pon = flow.handler.is_pon_port(flow.in_port)
+
+        if self._is_ingress_map and is_pon:
+            pon_port = flow.handler.get_southbound_port(flow.in_port)
+            if pon_port is None:
+                returnValue('no PON')
+
+            session = self._handler.rest_client
+            tconts = pon_port.tconts
+            traffic_descriptors = pon_port.traffic_descriptors
+
+            if traffic_descriptors is None or tconts is None:
+                returnValue('no TDs on PON')
+
+            bandwidth = self._upstream_bandwidth or 10000000
+
+            for onu_id in self.onu_ids:
+                name = 'tcont-{}-{}-data'.format(self.pon_id, onu_id)
+                td = traffic_descriptors.get(name)
+                tcont = tconts.get(name)
+
+                if td is not None and tcont is not None:
+                    alloc_id = tcont.alloc_id
+                    td.maximum_bandwidth = bandwidth
+                    try:
+                        results = yield td.add_to_hardware(session, pon_port.pon_id, onu_id, alloc_id)
+                        log.debug('td-modify-results', results=results)
+
+                    except Exception as _e:
+                        pass
+
     def add_gem_port(self, gem_port, reflow=False):
         # TODO: Refactor
         if self._is_ingress_map:
@@ -700,6 +745,9 @@ class EVCMap(object):
 
         is_pon = flow.handler.is_pon_port(flow.in_port)
         is_uni = flow.handler.is_uni_port(flow.in_port)
+
+        if flow.bandwidth is not None:
+            self._upstream_bandwidth = flow.bandwidth * 1000000
 
         if is_pon or is_uni:
             # Preserve CE VLAN tag only if utility VLAN/EVC
