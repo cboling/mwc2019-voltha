@@ -589,6 +589,8 @@ class FlowDecomposer(object):
 
         assert len(route) == 2
         ingress_hop, egress_hop = route
+        log.info('decompose-flow', in_port_no=in_port_no, out_port_no=out_port_no,
+                 ingress_hop=ingress_hop, egress_hop=egress_hop)
 
         def is_downstream():
             return ingress_hop.device.root
@@ -675,7 +677,7 @@ class FlowDecomposer(object):
         else:
             # NOT A CONTROLLER-BOUND FLOW
             if is_upstream():
-
+                log.info('decompose-flow-is-upstream')
                 # We assume that anything that is upstream needs to get Q-in-Q
                 # treatment and that this is expressed via two flow rules,
                 # the first using the goto-statement. We also assume that the
@@ -702,7 +704,6 @@ class FlowDecomposer(object):
                     ))
 
                 else:
-
                     actions = [action.type for action in get_actions(flow)]
                     # Transparent ONU and OLT case (No-L2-Modification flow)
                     if len(actions) == 1 and OUTPUT in actions:
@@ -760,11 +761,12 @@ class FlowDecomposer(object):
                         ))
 
             else:  # downstream
+                log.info('decompose-flow-is-downstream')
                 if has_next_table(flow):
                     assert out_port_no is None
 
                     if get_metadata(flow) is not None:
-                        log.debug('creating-metadata-flow', flow=flow)
+                        log.info('creating-metadata-flow', flow=flow)
                         # For downstream flows with dual-tags, recalculate route.
                         port_number = get_port_number_from_metadata(flow)
 
@@ -807,7 +809,7 @@ class FlowDecomposer(object):
                             ]
                         ))
                     else:
-                        log.debug('creating-standard-flow', flow=flow)
+                        log.info('creating-standard-flow', flow=flow)
                         fl_lst, _ = device_rules.setdefault(
                             ingress_hop.device.id, ([], []))
                         fl_lst.append(mk_flow_stat(

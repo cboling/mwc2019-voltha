@@ -222,7 +222,7 @@ class AdtranOnuHandler(AdtranXPON):
             self.adapter_agent.register_for_proxied_messages(device.proxy_address)
 
             # initialize device info
-            device.root = True
+            device.root = False
             device.vendor = 'Adtran Inc.'
             device.model = 'n/a'
             device.hardware_version = 'n/a'
