@@ -80,6 +80,8 @@ class AdtranOltHandler(AdtranDeviceHandler):
         self._downloads = {}        # name -> Download obj
         self._pio_exception_map = []
 
+        self.downstream_shapping_supported = True      # 1971320F1-ML-4154 and later
+
         # FIXME:  Remove once we containerize.  Only exists to keep BroadCom OpenOMCI ONU Happy
         #         when it reaches up our rear and tries to yank out a UNI port number
         self.platform_class = None
@@ -205,6 +207,17 @@ class AdtranOltHandler(AdtranDeviceHandler):
                                                               install_datetime='Not Available',
                                                               hash='Not Available')
                                                 device['software-images'].append(image)
+
+                    # Update features based on version
+                    # Format expected to be similar to:  1971320F1-ML-4154
+
+                    running_version = next((image.version for image in device.get('software-images', list())
+                                           if image.is_active), '').split('-')
+                    if len(running_version) > 2:
+                        try:
+                            self.downstream_shapping_supported = int(running_version[-1]) >= 4154
+                        except ValueError:
+                            pass
 
         except Exception as e:
             self.log.exception('dev-info-failure', e=e)

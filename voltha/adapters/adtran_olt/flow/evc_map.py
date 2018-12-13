@@ -82,6 +82,7 @@ class EVCMap(object):
         self._status_message = None
         self._deferred = None
         self._name = None
+        self._shaper_name = None
         self._enabled = True
         self._uni_port = None
         self._evc_connection = EVCMap.EvcConnection.DEFAULT
@@ -348,7 +349,7 @@ class EVCMap(object):
 
                     log.info('upstream-bandwidth')
                     try:
-                        yield self.update_flow_bandwidth()
+                        yield self.update_upstream_flow_bandwidth()
 
                     except Exception as e:
                         log.exception('upstream-bandwidth-failed', name=self.name, e=e)
@@ -378,6 +379,15 @@ class EVCMap(object):
                     self._installed = is_installed
                     self._new_acls.update(work_acls)
                     raise
+
+                # Install any needed shapers
+                if self._installed:
+                    try:
+                        yield self.update_downstream_flow_bandwidth()
+
+                    except Exception as e:
+                        log.exception('shaper-install-failed', name=self.name, e=e)
+                        raise
 
         returnValue(self._installed and self._valid)
 
@@ -423,12 +433,17 @@ class EVCMap(object):
             if len(dl) > 0:
                 defer.gatherResults(dl, consumeErrors=True)
 
+        def _remove_shaper(_):
+            if self._shaper_name is not None:
+                self.update_downstream_flow_bandwidth(remove=True)
+
         map_xml = self._ingress_remove_xml(self._gem_ids_and_vid) if self._is_ingress_map \
             else self._egress_remove_xml()
 
         d = self._handler.netconf_client.edit_config(map_xml)
         d.addCallbacks(_success, _failure)
         d.addBoth(_remove_acls)
+        d.addBoth(_remove_shaper)
         return d
 
     @inlineCallbacks
@@ -639,7 +654,11 @@ class EVCMap(object):
                 'flow-id': items[2].split('.')[0]} if len(items) > 2 else dict()
 
     @inlineCallbacks
-    def update_flow_bandwidth(self):
+    def update_upstream_flow_bandwidth(self):
+        """
+        Upstream flow bandwidth comes from the flow_entry related to this EVC-MAP
+        and if no bandwidth property is found, allow full bandwidth
+        """
         # all flows should should be on the same PON
         flow = self._flows.itervalues().next()
         is_pon = flow.handler.is_pon_port(flow.in_port)
@@ -656,7 +675,7 @@ class EVCMap(object):
             if traffic_descriptors is None or tconts is None:
                 returnValue('no TDs on PON')
 
-            bandwidth = self._upstream_bandwidth or 10000000
+            bandwidth = self._upstream_bandwidth or 10000000000
 
             for onu_id in self.onu_ids:
                 name = 'tcont-{}-{}-data'.format(self.pon_id, onu_id)
@@ -672,6 +691,59 @@ class EVCMap(object):
 
                     except Exception as _e:
                         pass
+
+    @inlineCallbacks
+    def update_downstream_flow_bandwidth(self, remove=False):
+        """
+        Downstream flow bandwidth is extracted from the related EVC flow_entry
+        bandwidth property. It is written to this EVC-MAP only if it is found
+        """
+        xml = None
+        results = None
+
+        if remove:
+            name, self._shaper_name = self._shaper_name, None
+            if name is not None:
+                xml = self._shaper_remove_xml(name)
+        else:
+            if self._evc is not None and self._evc.flow_entry is not None \
+                    and self._evc.flow_entry.bandwidth is not None:
+                self._shaper_name = self._name
+                xml = self._shaper_install_xml(self._shaper_name,
+                                               self._evc.flow_entry.bandwidth * 1000)  # kbps
+        if xml is not None:
+            try:
+                log.info('downstream-bandwidth', xml=xml, name=self.name, remove=remove)
+                results = yield self._handler.netconf_client.edit_config(xml)
+
+            except RPCError as rpc_err:
+                if rpc_err.tag == 'data-exists':
+                    pass
+
+            except Exception as e:
+                log.exception('downstream-bandwidth', name=self.name, remove=remove, e=e)
+                raise
+
+        returnValue(results)
+
+    def _shaper_install_xml(self, name, bandwidth):
+        xml = '<adtn-shaper:shapers xmlns:adtn-shaper="http://www.adtran.com/ns/yang/adtran-traffic-shapers" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">' + \
+              ' <adtn-shaper:shaper nc:operation="create">'
+        xml += '  <adtn-shaper:name>{}</adtn-shaper:name>'.format(name)
+        xml += '  <adtn-shaper:enabled>true</adtn-shaper:enabled>'
+        xml += '  <adtn-shaper:rate>{}</adtn-shaper:rate>'.format(bandwidth)
+        xml += '  <adtn-shaper-evc-map:evc-map xmlns:adtn-shaper-evc-map="http://www.adtran.com/ns/yang/adtran-traffic-shaper-evc-maps">{}</adtn-shaper-evc-map:evc-map>'.format(self.name)
+        xml += ' </adtn-shaper:shaper>'
+        xml += '</adtn-shaper:shapers>'
+        return xml
+
+    def _shaper_remove_xml(self, name):
+        xml = '<adtn-shaper:shapers xmlns:adtn-shaper="http://www.adtran.com/ns/yang/adtran-traffic-shapers" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">' + \
+              ' <adtn-shaper:shaper nc:operation="delete">'
+        xml += '  <adtn-shaper:name>{}</adtn-shaper:name>'.format(self.name)
+        xml += ' </adtn-shaper:shaper>'
+        xml += '</adtn-shaper:shapers>'
+        return xml
 
     def add_gem_port(self, gem_port, reflow=False):
         # TODO: Refactor

@@ -489,28 +489,26 @@ class FlowEntry(object):
                     # Downstream flow
                     log.debug('*** field.type == METADATA', value=field.table_metadata)
 
-                    if 0xFFFFFFFF >= field.table_metadata > OFPVID_PRESENT + 4095:
-                        # Default flows for old-style controller flows
-                        self.inner_vid = None
-
-                    elif field.table_metadata > 0xFFFFFFFF:
+                    if field.table_metadata > 4095:
                         # ONOS v1.13.5 or later. c-vid in upper 32-bits
-                        # For Telefonica, any upstream bandwidth in upper 20-bits
-                        metadata = field.table_metadata >> 32
+                        # For MWC2019, any upstream bandwidth in upper 20-bits
+                        vid = field.table_metadata & 0x0FFF
+                        bandwidth = field.table_metadata >> 12
 
-                        self.inner_vid = metadata & 0x0FFF
-                        bandwidth = metadata >> 12
+                        if vid > 0:
+                            self.inner_vid = vid        # CTag is never '0'
+
                         if bandwidth > 0:
                             self._bandwidth = bandwidth
                             log.info('downstream-bandwidth', bandwidth=self._bandwidth)
 
-                    else:
-                        # Pre- ONOS v1.13.5
+                    elif field.table_metadata > 0:
+                        # Pre-ONOS v1.13.5 (vid without the 4096 offset)
                         self.inner_vid = field.table_metadata
 
                 else:
                     # Upstream flow
-                    # Telefonica bandwidth is in the metadata (if any)
+                    # MWC2019 bandwidth is in the metadata (if any)
                     if field.table_metadata > 0:
                         self._bandwidth = field.table_metadata
                         log.info('upstream-bandwidth', bandwidth=self._bandwidth)
