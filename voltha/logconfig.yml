@@ -25,7 +25,7 @@ formatters:
 handlers:
   console:
     class : logging.StreamHandler
-    level: DEBUG
+    level: INFO
     formatter: default
     stream: ext://sys.stdout
   localRotatingFile:
@@ -34,7 +34,7 @@ handlers:
     formatter: default
     maxBytes: 2097152
     backupCount: 10
-    level: DEBUG
+    level: INFO
   null:
     class: logging.NullHandler
 
