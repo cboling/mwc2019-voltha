@@ -38,8 +38,8 @@ from voltha.extensions.omci.tasks.file_download_task import FileDownloadTask
 OpenOmciAgentDefaults = {
     'mib-synchronizer': {
         'state-machine': MibSynchronizer,  # Implements the MIB synchronization state machine
-        # 'database': MibDbVolatileDict,     # Implements volatile ME MIB database
-        'database': MibDbExternal,         # Implements persistent ME MIB database
+        'database': MibDbVolatileDict,     # Implements volatile ME MIB database
+        # 'database': MibDbExternal,         # Implements persistent ME MIB database
         'advertise-events': True,          # Advertise events on OpenOMCI event bus
         'tasks': {
             'mib-upload': MibUploadTask,

@@ -158,9 +158,9 @@ class AdtranOltResourceMgr(object):
 
     def free_pon_resources_for_onu(self, pon_intf_id_onu_id):
         """ Typically called on ONU delete """
-
         pon_intf_id = pon_intf_id_onu_id[0]
         onu_id = pon_intf_id_onu_id[1]
+        gemport_ids = None
         try:
             alloc_ids = self.resource_mgr.get_current_alloc_ids_for_onu(pon_intf_id_onu_id)
             if alloc_ids is not None:

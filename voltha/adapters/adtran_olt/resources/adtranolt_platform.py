@@ -128,6 +128,9 @@ class adtran_platform(object):
     def mk_uni_port_num(self, intf_id, onu_id):
         return intf_id << 11 | onu_id << 4
 
+    def uni_id_from_uni_port(self, uni_port):
+        return uni_port & 0xF
+
 
 def mk_uni_port_num(intf_id, onu_id):
     """
@@ -137,6 +140,10 @@ def mk_uni_port_num(intf_id, onu_id):
     :return: (int) UNI Port number
     """
     return intf_id << 11 | onu_id << 4
+
+
+def uni_id_from_uni_port(uni_port):
+    return uni_port & 0xF
 
 
 def intf_id_from_uni_port_num(port_num):

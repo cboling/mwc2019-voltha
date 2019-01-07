@@ -79,9 +79,12 @@ DOCKER_IMAGE_LIST = \
 	grafana \
 	onos \
 	unum \
+	ponsim \
 	tester \
 	config-push \
-	j2
+	j2 \
+	alarm-generator \
+	test_runner
 
 # The following list was scavanged from the compose / stack files as well as
 # from the Dockerfiles. If nothing else it highlights that VOLTHA is not
@@ -102,7 +105,7 @@ FETCH_BUILD_IMAGE_LIST = \
        kamon/grafana_graphite:3.0 \
        lyft/envoy:29361deae91575a1d46c7a21e913f19e75622ebe \
        maven:3-jdk-8-alpine \
-       onosproject/onos:1.10.9 \
+       onosproject/onos:1.13.5 \
        opennms/horizon-core-web:19.0.1-1 \
        portainer/portainer:1.15.2 \
        ubuntu:xenial

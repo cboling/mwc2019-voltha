@@ -18,6 +18,7 @@ import json
 import structlog
 from twisted.internet import reactor, defer
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
+from voltha.protos.device_pb2 import Device
 
 from adtran_olt_handler import AdtranOltHandler
 from net.adtran_rest import RestInvalidResponseCode
@@ -51,7 +52,10 @@ class Onu(object):
         self._password = onu_info['password']
 
         self._created = False
-        self._proxy_address = None
+        self._proxy_address = Device.ProxyAddress(device_id=self.olt.device_id,
+                                                  channel_id=self.olt.pon_id_to_port_number(self._pon_id),
+                                                  onu_id=self._onu_id,
+                                                  onu_session_id=self._onu_id)
         self._sync_tick = _HW_SYNC_SECS
         self._expedite_sync = False
         self._expedite_count = 0
@@ -206,14 +210,6 @@ class Onu(object):
 
     @property
     def proxy_address(self):
-        if self._proxy_address is None:
-            from voltha.protos.device_pb2 import Device
-
-            device_id = self.olt.device_id
-            self._proxy_address = Device.ProxyAddress(device_id=device_id,
-                                                      channel_id=self.pon.port_no,
-                                                      onu_id=self.onu_id,
-                                                      onu_session_id=self.onu_id)
         return self._proxy_address
 
     @property
@@ -373,13 +369,13 @@ class Onu(object):
 
         self._gem_ports.clear()
         self._tconts.clear()
+        olt, self._olt = self._olt, None
 
         uri = AdtranOltHandler.GPON_ONU_CONFIG_URI.format(self._pon_id, self._onu_id)
         name = 'onu-delete-{}-{}-{}: {}'.format(self._pon_id, self._onu_id,
                                                 self._serial_number_base64, self._enabled)
         try:
-            yield self.olt.rest_client.request('DELETE', uri, name=name)
-            self._olt = None
+            yield olt.rest_client.request('DELETE', uri, name=name)
 
         except RestInvalidResponseCode as e:
             if e.code != 404:
@@ -387,6 +383,10 @@ class Onu(object):
 
         except Exception as e:
             self.log.exception('onu-delete', e=e)
+
+        # Release resource manager resources for this ONU
+        pon_intf_id_onu_id = (self.pon_id, self.onu_id)
+        olt.resource_mgr.free_pon_resources_for_onu(pon_intf_id_onu_id)
 
         returnValue('deleted')
 

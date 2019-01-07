@@ -237,7 +237,7 @@ class AdtranOltHandler(AdtranDeviceHandler):
     def default_resource_mgr_device_info(self):
         class AdtranOltDevInfo(object):
             def __init__(self, pon_ports):
-                self.technology = "gpon"
+                self.technology = "xgspon"
                 self.onu_id_start = 0
                 self.onu_id_end = platform.MAX_ONUS_PER_PON
                 self.alloc_id_start = platform.MIN_TCONT_ALLOC_ID
@@ -250,6 +250,23 @@ class AdtranOltHandler(AdtranDeviceHandler):
                 self.intf_ids = pon_ports.keys()    # PON IDs
 
         return AdtranOltDevInfo(self.southbound_ports)
+
+
+    def get_ofp_port_name(self, pon_id, onu_id, logical_port_number):
+        parent_port_no = self.pon_id_to_port_number(pon_id)
+        child_device = self.adapter_agent.get_child_device(self.device_id,
+                                                           parent_port_no=parent_port_no, onu_id=onu_id)
+        if child_device is None:
+            self.log.error("could-not-find-child-device", parent_port_no=pon_id, onu_id=onu_id)
+            return None, None
+
+        ports = self.adapter_agent.get_ports(child_device.id, Port.ETHERNET_UNI)
+        port = next((port for port in ports if port.port_no == logical_port_number), None)
+        logical_port = self.adapter_agent.get_logical_port(self.logical_device_id,
+                                                           port.label)
+        ofp_port_name = (logical_port.ofp_port.name, logical_port.ofp_port.port_no)
+
+        return ofp_port_name
 
     @inlineCallbacks
     def enumerate_northbound_ports(self, device):
@@ -405,7 +422,7 @@ class AdtranOltHandler(AdtranDeviceHandler):
             pon_id = pon.get('pon-id')
             assert pon_id is not None, 'PON ID not found'
             if pon['ifIndex'] is None:
-                pon['port_no'] = self._pon_id_to_port_number(pon_id)
+                pon['port_no'] = self.pon_id_to_port_number(pon_id)
             else:
                 pass        # Need to adjust ONU numbering !!!!
 
@@ -578,6 +595,11 @@ class AdtranOltHandler(AdtranDeviceHandler):
         self._zmq_shutdown()
         self._pio_exception_map = []
 
+        # Remove any UNI ports that were created for any activated ONUs
+        uni_ports = self.adapter_agent.get_ports(self.device_id, Port.ETHERNET_UNI)
+        for uni_port in uni_ports:
+            self.adapter_agent.delete_port(self.device_id, uni_port)
+
         super(AdtranOltHandler, self).disable()
 
     def reenable(self, done_deferred=None):
@@ -629,17 +651,6 @@ class AdtranOltHandler(AdtranDeviceHandler):
         self._zmq_shutdown()
 
         super(AdtranOltHandler, self).delete()
-
-    def delete_child_device(self, proxy_address):
-        super(AdtranOltHandler, self).delete_child_device(proxy_address)
-
-        # TODO: Verify that ONU object cleanup of ONU will also clean
-        #       up logical id and physical port
-        pon_intf_id_onu_id = (proxy_address.channel_id,
-                              proxy_address.onu_id)
-
-        # Free any PON resources that were reserved for the ONU
-        self.resource_mgr.free_pon_resources_for_onu(pon_intf_id_onu_id)
 
     def rx_pa_packet(self, packets):
         if self._pon_agent is not None:
@@ -1001,7 +1012,7 @@ class AdtranOltHandler(AdtranDeviceHandler):
 
         return pon_id, onu_id
 
-    def _pon_id_to_port_number(self, pon_id):
+    def pon_id_to_port_number(self, pon_id):
         return pon_id + 1 + 4   # Skip over uninitialized ports
 
     def _port_number_to_pon_id(self, port):
@@ -1245,7 +1256,7 @@ class AdtranOltHandler(AdtranDeviceHandler):
         self.adapter_agent.update_device(device)
         return done
 
-    def add_onu_device(self, intf_id, onu_id, serial_number, tconts, gem_ports):
+    def add_onu_device(self, pon_id, onu_id, serial_number, tconts, gem_ports):
         onu_device = self.adapter_agent.get_child_device(self.device_id,
                                                          serial_number=serial_number)
         if onu_device is not None:
@@ -1253,19 +1264,19 @@ class AdtranOltHandler(AdtranDeviceHandler):
 
         try:
             from voltha.protos.voltha_pb2 import Device
-
-            # NOTE - channel_id of onu is set to intf_id
+            pon_port = self.pon_id_to_port_number(pon_id)
             proxy_address = Device.ProxyAddress(device_id=self.device_id,
-                                                channel_id=intf_id, onu_id=onu_id,
+                                                channel_id=pon_port,
+                                                onu_id=onu_id,
                                                 onu_session_id=onu_id)
 
-            self.log.debug("added-onu", port_no=intf_id,
+            self.log.debug("added-onu", port_no=pon_port,
                            onu_id=onu_id, serial_number=serial_number,
                            proxy_address=proxy_address)
 
             self.adapter_agent.add_onu_device(
                 parent_device_id=self.device_id,
-                parent_port_no=intf_id,
+                parent_port_no=pon_port,
                 vendor_id=serial_number[:4],
                 proxy_address=proxy_address,
                 root=True,
@@ -1277,7 +1288,7 @@ class AdtranOltHandler(AdtranDeviceHandler):
             onu_device = self.adapter_agent.get_child_device(self.device_id,
                                                              serial_number=serial_number)
 
-            reactor.callLater(0, self._seba_xpon_create, onu_device, intf_id, onu_id, tconts, gem_ports)
+            reactor.callLater(0, self._seba_xpon_create, onu_device, pon_port, onu_id, tconts, gem_ports)
             return onu_device
 
         except Exception as e:

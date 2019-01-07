@@ -69,7 +69,7 @@ class PonPort(AdtnPort):
         self._discovered_onus = []  # List of serial numbers
         self._discovery_deferred = None     # Specifically for ONU discovery
 
-        self._onus = {}                     # serial_number-base64 -> ONU  (allowed list)
+        self._onus = {}                     # serial_number-base64 -> ONU
         self._onu_by_id = {}                # onu-id -> ONU
         self._mcast_gem_ports = {}          # VLAN -> GemPort
 
@@ -628,11 +628,9 @@ class PonPort(AdtnPort):
 
         # Get new/missing from the discovered ONU leaf.  Stale ONUs from previous
         # configs are now cleaned up during h/w re-sync/reflow.
-
         new, rediscovered_onus = self._process_status_onu_discovered_list(status.discovered_onu)
 
         # Process newly discovered ONU list and rediscovered ONUs
-
         for serial_number in new | rediscovered_onus:
             reactor.callLater(0, self.add_onu, serial_number, status)
 
@@ -726,13 +724,14 @@ class PonPort(AdtnPort):
     def _get_onu_info(self, serial_number):
         """
         Parse through available xPON information for ONU configuration settings
+
         :param serial_number: (string) Decoded (not base64) serial number string
         :return: (dict) onu config data or None on lookup failure
         """
         try:
             if self.activation_method == "autodiscovery":
                 # if self.authentication_method == 'serial-number':
-                raise NotImplemented('TODO: Not supported at this time')
+                raise NotImplemented('autodiscovery: Not supported at this time')
 
             elif self.activation_method == "autoactivate":
                 # TODO: Currently a somewhat copy of the xPON way to do things
@@ -794,7 +793,8 @@ class PonPort(AdtnPort):
         """
         Add an ONU to the PON
 
-        TODO:  This needs major refactoring after xPON is deprecated to be more maintainable
+        :param serial_number_64: (str) base-64 encoded serial number
+        :param status: (dict) OLT PON status. Used to detect if ONU is already provisioned
         """
         serial_number = Onu.serial_number_to_string(serial_number_64)
         self.log.info('add-onu', serial_number=serial_number,
@@ -811,28 +811,12 @@ class PonPort(AdtnPort):
             alarm = OnuDiscoveryAlarm(self.olt.alarms, self.pon_id, serial_number)
             reactor.callLater(0, alarm.raise_alarm)
 
-        if serial_number_64 not in status.onus or onu_info['onu-id'] not in self._active_los_alarms:
+        if serial_number_64 not in status.onus: # or onu_info['onu-id'] not in self._active_los_alarms:
             onu = None
             onu_id = onu_info['onu-id']
 
-            if serial_number_64 in self._onus and onu_id in self._onu_by_id:
-                # Handles fast entry into this task before FPGA can set/clear results
-                returnValue('sticky-onu')
-
-            elif (serial_number_64 in self._onus and onu_id not in self._onu_by_id) or \
-                    (serial_number_64 not in self._onus and onu_id in self._onu_by_id):
-                # May be here due to unmanaged power-cycle on OLT or fiber bounced for a
-                # previously activated ONU.
-                #
-                # TODO: Track when the ONU was discovered, and if > some maximum amount
-                #       place the ONU (with serial number & ONU ID) on a wait list and
-                #       use that to recover the ONU ID should it show up within a
-                #       reasonable amount of time.  Periodically groom the wait list and
-                #       delete state ONUs so we can reclaim the ONU ID.
-                #
-                returnValue('waiting-for-fpga')    # non-XPON mode will not
-
-            elif len(self._onus) >= self.MAX_ONUS_SUPPORTED:
+            # At our limit?   TODO: Retrieve from device resource manager if available
+            if len(self._onus) >= self.MAX_ONUS_SUPPORTED:
                 self.log.warning('max-onus-provisioned', count=len(self._onus))
                 returnValue('max-onus-reached')
 
@@ -847,7 +831,7 @@ class PonPort(AdtnPort):
                 gem_ports = onu_info.pop('gem-ports')
 
                 if activate_onu:
-                    _onu_device = self._parent.add_onu_device(self._port_no,     # PON ID
+                    _onu_device = self._parent.add_onu_device(self.pon_id,       # PON ID
                                                               onu.onu_id,        # ONU ID
                                                               serial_number,
                                                               tconts,
@@ -906,10 +890,9 @@ class PonPort(AdtnPort):
         if onu_id in self._onu_by_id:
             del self._onu_by_id[onu_id]
 
-        for sn_64 in [onu.serial_number_64 for onu in self.onus if onu.onu_id == onu_id]:
-            del self._onus[sn_64]
-
         if onu is not None:
+            if onu.serial_number_64 in self._onus:
+                del self._onus[onu.serial_number_64]
             try:
                 # Remove from xPON config    (TODO: Deprecate this by refactoring ONU add steps)
                 name = 'customer-{}-{}'.format(self.pon_id, onu_id)
@@ -1060,8 +1043,11 @@ class PonPort(AdtnPort):
         tcont = TcontsConfigData()
         tcont.name = 'tcont-{}-{}-data'.format(self.pon_id, onu_id)
         pon_intf_onu_id = (self.pon_id, onu_id)
-        tcont.alloc_id = self._parent.resource_mgr.get_alloc_id(pon_intf_onu_id)
-        # TODO: Add release of alloc_id on ONU delete and/or TCONT delete
+        try:
+            tcont.alloc_id = self._parent.resource_mgr.get_alloc_id(pon_intf_onu_id)
+
+        except Exception as _e:
+            raise
 
         traffic_desc = TrafficDescriptorProfileData(name=tcont.name,
                                                     fixed_bandwidth=0,
