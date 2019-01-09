@@ -21,6 +21,7 @@ from twisted.internet import defer
 from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from ncclient.operations.rpc import RPCError
 
+
 log = structlog.get_logger()
 
 # NOTE: For the EVC Map name, the ingress-port number is the VOLTHA port number (not pon-id since
@@ -88,7 +89,7 @@ class EVCMap(object):
         self._evc_connection = EVCMap.EvcConnection.DEFAULT
         self._men_priority = EVCMap.PriorityOption.DEFAULT
         self._men_pri = 0  # If Explicit Priority
-        self._upstream_bandwidth = None
+        self._upstream_bandwidth = None      # Bits/second.  Convert to proper units when you install into h/w
 
         self._c_tag = None
         self._men_ctag_priority = EVCMap.PriorityOption.DEFAULT
@@ -219,8 +220,7 @@ class EVCMap(object):
         xml += '<match-untagged>{}</match-untagged>'.format('true'
                                                             if self._match_untagged
                                                             else 'false')
-        # if self._c_tag is not None:
-        #     xml += '<ctag>{}</ctag>'.format(self._c_tag)
+
         # TODO: The following is not yet supported (and in some cases, not decoded)
         # self._men_priority = EVCMap.PriorityOption.INHERIT_PRIORITY
         # self._men_pri = 0  # If Explicit Priority
@@ -231,11 +231,6 @@ class EVCMap(object):
         # self._match_ce_vlan_id = None
         # self._match_untagged = True
         # self._match_destination_mac_address = None
-        # self._eth_type = None
-        # self._ip_protocol = None
-        # self._ipv4_dst = None
-        # self._udp_dst = None
-        # self._udp_src = None
         return xml
 
     def _ingress_install_xml(self, onu_s_gem_ids_and_vid, acl_list, create):
@@ -696,7 +691,10 @@ class EVCMap(object):
     def update_downstream_flow_bandwidth(self, remove=False):
         """
         Downstream flow bandwidth is extracted from the related EVC flow_entry
-        bandwidth property. It is written to this EVC-MAP only if it is found
+        bandwidth property. It is written to this EVC-MAP only if it is found.
+
+        Note: The flow entry object saves the bandwidth in Mbps.  Convert in the
+              XML install routine to the proper units that the YANG model requires
         """
         xml = None
         results = None
@@ -710,7 +708,7 @@ class EVCMap(object):
                     and self._evc.flow_entry.bandwidth is not None:
                 self._shaper_name = self._name
                 xml = self._shaper_install_xml(self._shaper_name,
-                                               self._evc.flow_entry.bandwidth * 1000)  # kbps
+                                               self._evc.flow_entry.bandwidth)
         if xml is not None:
             try:
                 log.info('downstream-bandwidth', xml=xml, name=self.name, remove=remove)
@@ -727,13 +725,23 @@ class EVCMap(object):
         returnValue(results)
 
     def _shaper_install_xml(self, name, bandwidth):
+        """
+        Create the XML for an EVC MAP shaper
+
+        :param name: (str) EVC Map Name
+        :param bandwidth: (int or float) Bandwidth is in Bits/Second
+        :return: (string) XML string for the shaper
+        """
+        xml_bandwidth = int(bandwidth/1000)
+        log.debug('shaper-bandwidth', bandwidth=bandwidth, xml_bandwidth=xml_bandwidth)
+
         xml = '<adtn-shaper:shapers xmlns:adtn-shaper="http://www.adtran.com/ns/yang/adtran-traffic-shapers" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="merge">'
         for onu_id, gem_ids_and_vid in self._gem_ids_and_vid.iteritems():
             for gem_id in gem_ids_and_vid[0]:
                 xml += ' <adtn-shaper:shaper>'
                 xml += '  <adtn-shaper:name>{}.{}.{}</adtn-shaper:name>'.format(name, onu_id, gem_id)
                 xml += '  <adtn-shaper:enabled>true</adtn-shaper:enabled>'
-                xml += '  <adtn-shaper:rate>{}</adtn-shaper:rate>'.format(bandwidth)
+                xml += '  <adtn-shaper:rate>{}</adtn-shaper:rate>'.format(xml_bandwidth)
                 xml += '  <adtn-shaper-evc-map:evc-map xmlns:adtn-shaper-evc-map="http://www.adtran.com/ns/yang/adtran-traffic-shaper-evc-maps">{}.{}.{}</adtn-shaper-evc-map:evc-map>'.format(self.name, onu_id, gem_id)
                 xml += ' </adtn-shaper:shaper>'
         xml += '</adtn-shaper:shapers>'

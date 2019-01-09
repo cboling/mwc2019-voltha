@@ -89,7 +89,7 @@ class FlowEntry(object):
         self._logical_port = None    # Currently ONU VID is logical port if not doing xPON
         self._is_multicast = False
         self._is_acl_flow = False
-        self._bandwidth = None
+        self._bandwidth = None       # Stored as Mbps... (float if fractional bandwidth is specified)
 
         # A value used to locate possible related flow entries
         self.signature = None
@@ -491,7 +491,7 @@ class FlowEntry(object):
 
                     if field.table_metadata > 4095:
                         # ONOS v1.13.5 or later. c-vid in upper 32-bits
-                        # For MWC2019, any upstream bandwidth in upper 20-bits
+                        # For MWC2019, any upstream bandwidth in upper 20-bits and is Mbps
                         vid = field.table_metadata & 0x0FFF
                         bandwidth = field.table_metadata >> 12
 
@@ -508,7 +508,7 @@ class FlowEntry(object):
 
                 else:
                     # Upstream flow
-                    # MWC2019 bandwidth is in the metadata (if any)
+                    # MWC2019 bandwidth is in the metadata (if any) and is Mbps
                     if field.table_metadata > 0:
                         self._bandwidth = field.table_metadata
                         log.info('upstream-bandwidth', bandwidth=self._bandwidth)
