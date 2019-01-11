@@ -387,12 +387,11 @@ class EVCMap(object):
         returnValue(self._installed and self._valid)
 
     def _ingress_remove_xml(self, onus_gem_ids_and_vid):
-        xml = '<evc-maps xmlns="http://www.adtran.com/ns/yang/adtran-evc-maps"' + \
-              ' xc:operation="delete">'
+        xml = '<evc-maps xmlns="http://www.adtran.com/ns/yang/adtran-evc-maps">'
 
         for onu_id, gem_ids_and_vid in onus_gem_ids_and_vid.iteritems():
             for gem_id in gem_ids_and_vid[0]:
-                xml += '<evc-map>'
+                xml += '<evc-map xc:operation="delete">'
                 xml += '<name>{}.{}.{}</name>'.format(self.name, onu_id, gem_id)
                 xml += '</evc-map>'
         xml += '</evc-maps>'
@@ -707,8 +706,10 @@ class EVCMap(object):
             if self._evc is not None and self._evc.flow_entry is not None \
                     and self._evc.flow_entry.bandwidth is not None:
                 self._shaper_name = self._name
+                # use upstream-bandwith under the assumption that upstream- and
+                # downstream-bandwith are identical
                 xml = self._shaper_install_xml(self._shaper_name,
-                                               self._evc.flow_entry.bandwidth)
+                                                self._upstream_bandwidth)
         if xml is not None:
             try:
                 log.info('downstream-bandwidth', xml=xml, name=self.name, remove=remove)
@@ -748,10 +749,10 @@ class EVCMap(object):
         return xml
 
     def _shaper_remove_xml(self, name):
-        xml = '<adtn-shaper:shapers xmlns:adtn-shaper="http://www.adtran.com/ns/yang/adtran-traffic-shapers" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete">'
+        xml = '<adtn-shaper:shapers xmlns:adtn-shaper="http://www.adtran.com/ns/yang/adtran-traffic-shapers" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0">'
         for onu_id, gem_ids_and_vid in self._gem_ids_and_vid.iteritems():
             for gem_id in gem_ids_and_vid[0]:
-                xml += ' <adtn-shaper:shaper >'
+                xml += ' <adtn-shaper:shaper nc:operation="delete">'
                 xml += '  <adtn-shaper:name>{}.{}.{}</adtn-shaper:name>'.format(name, onu_id, gem_id)
                 xml += ' </adtn-shaper:shaper>'
         xml += '</adtn-shaper:shapers>'
