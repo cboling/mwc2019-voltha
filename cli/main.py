@@ -612,15 +612,16 @@ class TestCli(VolthaCli):
         # gather NNI and UNI port IDs
         nni_port_no, unis = self.get_logical_ports(logical_device_id)
 
-        self.poutput('inside for {} {} {} '.format(nni_port_no, unis, logical_device_id))
+        self.poutput('inside for {} {} {} '.format(nni_port_no, logical_device_id, unis))
 
         # construct and push flow rules
         stub = self.get_stub()
+        c_vid = 3
 
-        for uni_port_no, c_vid in unis:
-            self.poutput('inside for {} {}'.format(uni_port_no, c_vid))
-            meta_data = 600 << 44 | 4 << 32 | uni_port_no
-            self.poutput('meta_data {:x}'.format(meta_data))
+        for uni_port_no, _ in unis:
+            c_vid += 1
+            self.poutput('inside loop for UNI PORT:{}, CVID:{}'.format(uni_port_no, c_vid))
+
             # Unicast flows:
             # Downstream flow 1
             stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
@@ -630,7 +631,7 @@ class TestCli(VolthaCli):
                     match_fields=[
                         in_port(nni_port_no),
                         vlan_vid(4096 + 9),
-                        metadata(600 << 44 | 4 << 32 | uni_port_no)
+                        metadata(600 << 44 | c_vid << 32 | uni_port_no)
                     ],
                     actions=[pop_vlan()],
                     next_table_id=1
@@ -642,7 +643,7 @@ class TestCli(VolthaCli):
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
                     table_id=1,
-                    match_fields=[in_port(nni_port_no), vlan_vid(4096 + 4)],
+                    match_fields=[in_port(nni_port_no), vlan_vid(4096 + c_vid)],
                     actions=[set_field(vlan_vid(4096 + 0)), output(uni_port_no)]
                 )
             ))
@@ -652,7 +653,7 @@ class TestCli(VolthaCli):
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
                     match_fields=[in_port(uni_port_no), vlan_vid(4096 + 0), metadata(65)],
-                    actions=[set_field(vlan_vid(4096 + 4))],
+                    actions=[set_field(vlan_vid(4096 + c_vid))],
                     next_table_id=1
                 )
             ))
@@ -663,7 +664,7 @@ class TestCli(VolthaCli):
                 flow_mod=mk_simple_flow_mod(
                     priority=500,
                     table_id=1,
-                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + 4), metadata(65)],
+                    match_fields=[in_port(uni_port_no), vlan_vid(4096 + c_vid), metadata(65)],
                     actions=[
                         push_vlan(0x8100),
                         set_field(vlan_vid(4096 + 9)),
@@ -676,8 +677,6 @@ class TestCli(VolthaCli):
 
     complete_install_all_sample_flows = VolthaCli.complete_logical_device
 
-
-    
     def do_install_all_att_flows(self, line):
         """
         Install all flows that are representative of the virtualized access
