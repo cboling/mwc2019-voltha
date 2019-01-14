@@ -170,8 +170,10 @@ class UniPort(object):
         Get the VOLTHA PORT object for this port
         :return: VOLTHA Port object
         """
+        device = self._handler.adapter_agent.get_device(self._handler.device_id)
         self._port = Port(port_no=self.port_number,
-                          label=self.port_id_name(),
+                          label=device.serial_number,
+                          # label=self.port_id_name(),
                           type=Port.ETHERNET_UNI,
                           admin_state=self._admin_state,
                           oper_status=self._oper_status)

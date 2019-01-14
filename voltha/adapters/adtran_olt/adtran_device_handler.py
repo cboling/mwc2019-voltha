@@ -164,6 +164,10 @@ class AdtranDeviceHandler(object):
         # Installed flows
         self._evcs = {}  # Flow ID/name -> FlowEntry
 
+        # More hacks from St. Nick
+        from voltha.registry import registry
+        self.proxy = registry('core').get_proxy('/')
+
     def _delete_logical_device(self):
         ldi, self.logical_device_id = self.logical_device_id, None
 
@@ -1277,13 +1281,48 @@ class AdtranDeviceHandler(object):
             for child in children:
                 if child.proxy_address.onu_id == proxy_address.onu_id and \
                         child.proxy_address.channel_id == proxy_address.channel_id:
-                    self.adapter_agent.delete_child_device(self.device_id,
-                                                           child.id,
-                                                           onu_device=child)
+                    try:
+                        self.adapter_agent.delete_child_device(self.device_id,
+                                                               child.id,
+                                                               onu_device=child)
+                    except Exception as e:
+                        self.log.error('adapter_agent error', error=e)
+                    try:
+                        self.delete_logical_port(child.id)
+                    except Exception as e:
+                        self.log.error('logical_port delete error', error=e)
+                    try:
+                        self.delete_port(child.serial_number)
+                    except Exception as e:
+                        self.log.error('port delete error', error=e)
+
                     break
 
         except Exception as e:
             self.log.error('adapter_agent error', error=e)
+
+    def delete_logical_port(self, child_device_id):
+        logical_ports = self.proxy.get('/logical_devices/{}/ports'.format(
+            self.logical_device_id))
+        for logical_port in logical_ports:
+            if logical_port.device_id == child_device_id:
+                self.log.debug('delete-logical-port',
+                               onu_device_id=child_device_id,
+                               logical_port=logical_port)
+                self.adapter_agent.delete_logical_port(
+                    self.logical_device_id, logical_port)
+        pass
+
+    def delete_port(self, child_serial_number):
+        ports = self.proxy.get('/devices/{}/ports'.format(
+            self.device_id))
+        for port in ports:
+            if port.label == child_serial_number:
+                self.log.debug('delete-port',
+                               onu_serial_number=child_serial_number,
+                               port=port)
+                self.adapter_agent.delete_port(self.device_id, port)
+                break
 
     def packet_out(self, egress_port, msg):
         raise NotImplementedError('Overload in a derived class')

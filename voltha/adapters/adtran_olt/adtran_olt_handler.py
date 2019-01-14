@@ -30,7 +30,7 @@ from net.pon_zmq import PonClient
 from voltha.core.flow_decomposer import *
 from voltha.extensions.omci.omci import *
 from voltha.protos.common_pb2 import AdminState, OperStatus
-from voltha.protos.device_pb2 import ImageDownload, Image
+from voltha.protos.device_pb2 import ImageDownload, Image, Port
 from voltha.protos.openflow_13_pb2 import OFPP_MAX
 
 
@@ -250,7 +250,6 @@ class AdtranOltHandler(AdtranDeviceHandler):
                 self.intf_ids = pon_ports.keys()    # PON IDs
 
         return AdtranOltDevInfo(self.southbound_ports)
-
 
     def get_ofp_port_name(self, pon_id, onu_id, logical_port_number):
         parent_port_no = self.pon_id_to_port_number(pon_id)

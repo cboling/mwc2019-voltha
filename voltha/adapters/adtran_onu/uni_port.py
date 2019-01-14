@@ -161,8 +161,10 @@ class UniPort(object):
         :return: VOLTHA Port object
         """
         if self._port is None:
+            device = self._handler.adapter_agent.get_device(self._handler.device_id)
             self._port = Port(port_no=self.port_number,
-                              label='vEth-{}'.format(self.port_number),
+                              label=device.serial_number,
+                              # label='vEth-{}'.format(self.port_number),
                               type=Port.ETHERNET_UNI,
                               admin_state=self._admin_state,
                               oper_status=self._oper_status)

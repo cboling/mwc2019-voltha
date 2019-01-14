@@ -90,3 +90,5 @@ nosetests.xml
 
 # OpenOLT repo
 voltha/adapters/openolt/core
+/voltha.txt
+/flow_grep_input

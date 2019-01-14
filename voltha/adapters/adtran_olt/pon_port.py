@@ -912,12 +912,13 @@ class PonPort(AdtnPort):
                 self.log.exception('onu-delete-cleanup', serial_number=onu.serial_number, e=e)
 
             try:
+                proxy_address = onu.proxy_address
                 # Remove from hardware
                 onu.delete()
 
                 # And removal from VOLTHA adapter agent
                 if not hw_only:
-                    self._parent.delete_child_device(onu.proxy_address)
+                    self._parent.delete_child_device(proxy_address)
 
             except Exception as e:
                 self.log.exception('onu-delete', serial_number=onu.serial_number, e=e)
