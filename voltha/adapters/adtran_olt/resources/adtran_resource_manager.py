@@ -215,11 +215,11 @@ class AdtranPONResourceManager(PONResourceManager):
 
             elif resource_type == PONResourceManager.ALLOC_ID:
                 for content in release_content:
-                    self._release_id(resource, content)
+                    self._release_id(resource, content, onu_id)
 
             elif resource_type == PONResourceManager.GEMPORT_ID:
                 for content in release_content:
-                    self._release_id(resource, content, onu_id)
+                    self._release_id(resource, content)
             else:
                 raise Exception("get-resource-failed")
 
