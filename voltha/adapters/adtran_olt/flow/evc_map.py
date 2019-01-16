@@ -938,7 +938,11 @@ class EVCMap(object):
                         del_xml += '</evc-maps>'
                         log.debug('removing', xml=del_xml)
 
-                        return client.edit_config(del_xml)
+                        client.edit_config(del_xml)
+
+            xml = '<adtn-shaper:shapers xmlns:adtn-shaper="http://www.adtran.com/ns/yang/adtran-traffic-shapers" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete">'
+            client.edit_config(xml)
+                          
 
             return succeed('no entries')
 
