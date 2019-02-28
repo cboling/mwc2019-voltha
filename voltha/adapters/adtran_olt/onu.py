@@ -758,8 +758,8 @@ class Onu(object):
                 # May need to update flow tables/evc-maps
                 # GEM-IDs are a sorted list (ascending). First gemport handles downstream traffic
                 evc_maps = FlowEntry.find_evc_map_flows(self)
-                for evc_map in evc_maps:
-                    evc_map.remove_gem_port(gem_port)
+#                for evc_map in evc_maps:
+#                    evc_map.remove_gem_port(gem_port)
 
             yield gem_port.remove_from_hardware(self.olt.rest_client)
 
@@ -771,12 +771,12 @@ class Onu(object):
             self.log.exception('gem-port-delete', e=ex)
             raise
 
-        for evc_map in FlowEntry.find_evc_map_flows(self):
-            try:
-                evc_map.remove_gem_port(gem_port)
-
-            except Exception as ex:
-                self.log.exception('evc-map-gem-remove', e=ex)
+        #for evc_map in FlowEntry.find_evc_map_flows(self):
+        #    try:
+        #        evc_map.remove_gem_port(gem_port)
+#
+#            except Exception as ex:
+#                self.log.exception('evc-map-gem-remove', e=ex)
 
         returnValue('done')
 
