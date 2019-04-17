@@ -29,7 +29,7 @@ ADD config/dependencies.xml .
 RUN mvn dependency:copy -Dmdep.useBaseVersion=true -DoutputDirectory=${DOWNLOAD_ROOT} -Dsilent=true -f dependencies.xml -s mvn_settings.xml
 
 #FROM onosproject/onos:1.13.5 as install
-FROM voltha-tf-onos:latest as install
+FROM voltha-tf-onos:tf-base as install
 MAINTAINER Open Networking Foundation <info@opennetworking.org>
 
 # The ENV settings must be replicated below as they are not shared between stages
@@ -51,7 +51,7 @@ RUN ./app-install.sh
 
 # Create the final image coping over the installed applications from the build stage
 #FROM onosproject/onos:1.13.5
-FROM voltha-tf-onos:latest
+FROM voltha-tf-onos:tf-base
 MAINTAINER Open Networking Foundation <info@opennetworking.org>
 
 # Install Key Store Options
