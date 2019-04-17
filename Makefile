@@ -328,7 +328,7 @@ grafana:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-grafana:${TAG} -f docker/Dockerfile.grafana .
 
 onos:
-	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-mwc-2019-onos:${TAG} -f docker/Dockerfile.onos docker
+	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-telefonica-onos:${TAG} -f docker/Dockerfile.onos docker
 
 unum:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-unum:${TAG} -f unum/Dockerfile ./unum
