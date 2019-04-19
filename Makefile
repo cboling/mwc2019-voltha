@@ -149,7 +149,7 @@ FETCH_K8S_IMAGE_LIST = \
 
 FETCH_IMAGE_LIST = $(shell echo $(FETCH_BUILD_IMAGE_LIST) $(FETCH_COMPOSE_IMAGE_LIST) $(FETCH_K8S_IMAGE_LIST) | tr ' ' '\n' | sort -u)
 
-.PHONY: $(DIRS) $(DIRS_CLEAN) $(DIRS_FLAKE8) flake8 base voltha ofagent netconf shovel onos dashd cli alarm-generator portainer grafana nginx consul envoy go-builder envoyd tools opennms logstash unum ponsim start stop tag push pull
+.PHONY: $(DIRS) $(DIRS_CLEAN) $(DIRS_FLAKE8) flake8 base voltha ofagent netconf shovel onos onos-apps dashd cli alarm-generator portainer grafana nginx consul envoy go-builder envoyd tools opennms logstash unum ponsim start stop tag push pull
 
 # This should to be the first and default target in this Makefile
 help:
@@ -177,6 +177,7 @@ help:
 	@echo "netconf      : Build the netconf docker container"
 	@echo "shovel       : Build the shovel docker container"
 	@echo "onos         : Build the onos docker container"
+	@echo "onos-apps    : Build the onos applications for VOLTHA"
 	@echo "dashd        : Build the dashd docker container"
 	@echo "cli          : Build the cli docker container"
 	@echo "portainer    : Build the portainer docker container"
@@ -186,7 +187,7 @@ help:
 	@echo "unum         : Build the unum docker container"
 	@echo "ponsim       : Build the ponsim docker container"
 	@echo "j2           : Build the Jinja2 template container"
-        @echo "alarm-generator : Build the alarm-generator container"
+	@echo "alarm-generator : Build the alarm-generator container"
 	@echo "test_runner  : Build a container from which tests are run"
 	@echo "start        : Start VOLTHA on the current system"
 	@echo "stop         : Stop VOLTHA on the current system"
@@ -327,7 +328,10 @@ consul:
 grafana:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-grafana:${TAG} -f docker/Dockerfile.grafana .
 
-onos:
+onos-apps:
+	(cd ../../onos-apps/apps && mvn install -DskipTests -Dcheckstyle.skip -U -T 1C)
+
+onos: onos-apps
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-telefonica-onos:${TAG} -f docker/Dockerfile.onos docker
 
 unum:

@@ -24,7 +24,7 @@
     <version>fake</version>
 
     <properties>
-        <olt.version>2.1.0-SNAPSHOT</olt.version>
+        <olt.version>1.14.0</olt.version>
     </properties>
 
     <build>
@@ -36,8 +36,8 @@
                 <configuration>
                     <artifactItems>
                         <artifactItem>
-                            <groupId>org.opencord</groupId>
-                            <artifactId>olt-app</artifactId>
+                            <groupId>org.ctpd</groupId>
+                            <artifactId>ctpd-olt-app</artifactId>
                             <version>${olt.version}</version>
                             <type>oar</type>
                             <overWrite>true</overWrite>
