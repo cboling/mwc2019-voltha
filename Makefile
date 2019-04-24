@@ -329,10 +329,13 @@ grafana:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-grafana:${TAG} -f docker/Dockerfile.grafana .
 
 onos-apps:
+	@echo "Building ONOS Applications..."
 	(cd ../../onos-apps/apps && mvn install -DskipTests -Dcheckstyle.skip -U -T 1C)
 
 onos: onos-apps
-	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-telefonica-onos:${TAG} -f docker/Dockerfile.onos docker
+	@echo "Building ONOS..."
+	(cd ../../onos-apps && docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-telefonica-onos:${TAG} -f docker/Dockerfile.onos .)
+	#docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-telefonica-onos:${TAG} -f docker/Dockerfile.onos docker
 
 unum:
 	docker build $(DOCKER_BUILD_ARGS) -t ${REGISTRY}${REPOSITORY}voltha-unum:${TAG} -f unum/Dockerfile ./unum
