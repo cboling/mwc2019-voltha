@@ -39,6 +39,31 @@ from voltha.protos import third_party
 from voltha.protos import voltha_pb2
 from voltha.protos.openflow_13_pb2 import FlowTableUpdate, FlowGroupTableUpdate
 
+
+try:
+    REMOTE_DBG_HOST = '192.168.0.20'
+    # REMOTE_DBG_HOST = '10.0.2.15'
+
+    # sys.path.append('/cli/cli/pydevd/pydevd-pycharm.egg')
+    # import pydevd_pycharm
+    # # Initial breakpoint
+    # pydevd_pycharm.settrace(REMOTE_DBG_HOST, port=8765, stdoutToServer=True, stderrToServer=True, suspend=False)
+
+except ImportError:
+    print('Error importing pydevd package')
+    print('REMOTE DEBUGGING will not be supported in this run...')
+    # Continue on, you do not want to completely kill VOLTHA, you just need to fix it.
+
+except AttributeError:
+    print('Attribute error. Perhaps try to explicitly set PYTHONPATH to'
+          'pydevd directory and run again?')
+    print('REMOTE DEBUGGING will not be supported in this run...')
+    # Continue on, you do not want to completely kill VOLTHA, you just need to fix it.
+
+except:
+    print("pydevd startup exception: %s" % sys.exc_info()[0])
+    print('REMOTE DEBUGGING will not be supported in this run...')
+
 _ = third_party
 from cli.utils import pb2dict
 
@@ -830,6 +855,187 @@ class TestCli(VolthaCli):
         """
         pass
 
+    def do_install_tf_flows(self, line):
+        """
+        Install all flows for found ONUs for Telefonica
+        """
+        # import pydevd_pycharm
+        # pydevd_pycharm.settrace(REMOTE_DBG_HOST, port=8765, stdoutToServer=True, stderrToServer=True, suspend=False)
+
+        self.poutput('inside install Telefonica flows')
+        logical_device_id = line or self.default_logical_device_id
+
+        # gather NNI and UNI port IDs
+        nni_port_no, unis = self.get_logical_ports(logical_device_id)
+
+        self.poutput('inside for {} {} {} '.format(nni_port_no, unis, logical_device_id))
+
+        # construct and push flow rules
+        stub = self.get_stub()
+        s_vid = 3
+        default_speed = 1024
+        c_vid = 1
+        uni_port_no = 1000
+
+        # ---+---  Paul, make sure c_vid is okay  ---+---
+
+        #for uni_port_no, c_vid in unis:
+        self.poutput('inside for {} {}'.format(uni_port_no, c_vid))
+
+        # Upstream flow 1 for priority tagged case
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                priority=1000,
+                match_fields=[
+                    in_port(uni_port_no),
+                    metadata(default_speed),
+                    vlan_vid(4096 + 0)
+                ],
+                actions=[
+                    set_field(vlan_vid(4096 + c_vid))
+                ],
+                next_table_id=1
+            )
+        ))
+        # Upstream flow 2 for s-tag
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                priority=1000,
+                table_id=1,
+                match_fields=[
+                    in_port(uni_port_no),
+                    metadata(default_speed),
+                    vlan_vid(4096 + c_vid)
+                ],
+                actions=[
+                    push_vlan(0x8100),
+                    set_field(vlan_vid(4096 + s_vid)),
+                    output(nni_port_no)
+                ]
+            )
+        ))
+        #######################################################
+        # Downstream flow 1
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                priority=1000,
+                match_fields=[
+                    in_port(nni_port_no),
+                    metadata((default_speed << (12 + 32)) | c_vid << 32 | uni_port_no),
+                    vlan_vid(4096 + s_vid),
+                ],
+                actions=[pop_vlan()],
+                next_table_id=1
+            )
+        ))
+        # Downstream flow 2
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                priority=1000,
+                table_id=1,
+                match_fields=[
+                    in_port(nni_port_no),
+                    vlan_vid(4096 + c_vid)
+                ],
+                actions=[
+                    pop_vlan(),
+                    output(uni_port_no)
+                ]
+            )
+        ))
+
+        self.poutput('success')
+
+    complete_install_tf_flows = VolthaCli.complete_logical_device
+
+    def do_delete_tf_flows(self, line):
+        """
+        Remove all flows and flow groups from given logical device
+        """
+        # import pydevd_pycharm
+        # pydevd_pycharm.settrace(REMOTE_DBG_HOST, port=8765, stdoutToServer=True, stderrToServer=True, suspend=False)
+
+        self.poutput('inside remove Telefonica flows')
+        logical_device_id = line or self.default_logical_device_id
+
+        # gather NNI and UNI port IDs
+        nni_port_no, unis = self.get_logical_ports(logical_device_id)
+
+        self.poutput('inside for {} {} {} '.format(nni_port_no, unis, logical_device_id))
+
+        # construct and push flow rules
+        stub = self.get_stub()
+        s_vid = 3
+        default_speed = 1024
+        c_vid = 1
+        uni_port_no = 1000
+
+        # ---+---  Paul, make sure c_vid is okay  ---+---
+
+        # for uni_port_no, c_vid in unis:
+        self.poutput('inside for {} {}'.format(uni_port_no, c_vid))
+
+        # Upstream flow 1 for priority tagged case
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                command=ofp.OFPFC_DELETE,
+                priority=1000,
+                match_fields=[
+                    in_port(uni_port_no),
+                    metadata(default_speed),
+                    vlan_vid(4096 + 0)
+                ]
+            )
+        ))
+        # Downstream flow 1
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                command=ofp.OFPFC_DELETE,
+                priority=1000,
+                match_fields=[
+                    in_port(nni_port_no),
+                    metadata((default_speed << (12 + 32)) | c_vid << 32 | uni_port_no),
+                    vlan_vid(4096 + s_vid),
+                ]
+            )
+        ))
+        #######################################################
+        # Upstream flow 2 for s-tag
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                command=ofp.OFPFC_DELETE,
+                priority=1000,
+                table_id=1,
+                match_fields=[
+                    in_port(uni_port_no),
+                    metadata(default_speed),
+                    vlan_vid(4096 + c_vid)
+                ]
+            )
+        ))
+        # Downstream flow 2
+        stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+            id=logical_device_id,
+            flow_mod=mk_simple_flow_mod(
+                command=ofp.OFPFC_DELETE,
+                priority=1000,
+                table_id=1,
+                match_fields=[
+                    in_port(nni_port_no),
+                    vlan_vid(4096 + c_vid)
+                ]
+            )
+        ))
+        self.poutput('success')
+
+    complete_delete_tf_flows = VolthaCli.complete_logical_device
 
 if __name__ == '__main__':
 
