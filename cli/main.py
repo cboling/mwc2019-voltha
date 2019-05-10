@@ -830,6 +830,274 @@ class TestCli(VolthaCli):
         """
         pass
 
+    def get_logical_ports_and_onu_ids(self, logical_device_id):
+        """
+        Return the NNI port number and the first usable UNI port of logical
+        device, and the vlan associated with the latter.
+        """
+        stub = self.get_stub()
+        ports = stub.ListLogicalDevicePorts(
+            voltha_pb2.ID(id=logical_device_id)).items
+        nni = None
+        unis = []
+        for port in ports:
+            if port.root_port:
+                assert nni is None, "There shall be only one root port"
+                nni = port.ofp_port.port_no
+            else:
+                uni_port = port.ofp_port.port_no
+                uni_device = self.get_device(port.device_id)
+                onu_id = uni_device.proxy_address.onu_id
+                unis.append((uni_port, onu_id))
+
+        assert nni is not None, "No NNI port found"
+        assert unis, "Not a single UNI?"
+
+        return nni, unis
+
+    default_speed = 1024
+    min_speed = 1
+    max_speed = 9*1024  # Actually probably around 8.5 or 8.6 Gbps
+    max_onu_id = 127
+
+    @options([
+        make_option('-o', '--onu-id', action="store", dest='onu_id', help="ONU ID (0..127) - Required", default=None),
+        make_option('-s', '--sTag', action='store', dest='s_vid', help="sVID (1..4093) - Required", default=None),
+        make_option('-c', '--cTag', action='store', dest='c_vid', help="sVID (1..4093) - Required", default=None),
+        # make_option('-u', '--upstream-bandwidth', action='store', dest='upstream', default=default_speed,
+        #             help='Upstream Bandwidth Mbps (1..max), default = 1024 - Optional'),
+        # make_option('-d', '--downstream-bandwidth', action='store', dest='upstream', default=default_speed,
+        #             help='Upstream Bandwidth Mbps (1..max), default = 1024 - Optional'),
+    ])
+    def do_install_tf_flows(self, line, opts):
+        """
+        Install flows for a specific ONU
+        """
+
+        usage = '   usage: install_tf_flows -o <ONU-ID> -s <s-vid> -c <c-vid> [logical-device-id]'
+        onu_id = int(opts.onu_id) if opts.onu_id is not None else None
+        if onu_id is None or not (0 <= onu_id <= self.max_onu_id):
+            self.poutput('Invalid ONU ID {}. Must be 0..{}'.format(onu_id, self.max_onu_id))
+            self.poutput(usage)
+            return
+
+        s_vid = int(opts.s_vid) if opts.s_vid is not None else None
+        if s_vid is None or not (1 <= s_vid <= 4093):
+            self.poutput('Invalid S-VLAN ID {}. Must be 1..4093'.format(s_vid))
+            self.poutput(usage)
+            return
+
+        c_vid = int(opts.c_vid) if opts.c_vid is not None else None
+        if c_vid is None or not (1 <= s_vid <= 4093):
+            self.poutput('Invalid C-VLAN ID {}. Must be 1..4093'.format(c_vid))
+            self.poutput(usage)
+            return
+
+        logical_device_id = line or self.default_logical_device_id
+        if logical_device_id is None:
+            self.poutput('Logical Device ID not provided')
+            self.poutput(usage)
+            return
+
+        # gather NNI and UNI port IDs
+        nni_port_no, unis = self.get_logical_ports_and_onu_ids(logical_device_id)
+
+        # construct and push flow rules
+        stub = self.get_stub()
+        default_speed = self.default_speed
+        found = False
+
+        for uni_port_no, uni_onu_id in unis:
+            if uni_onu_id != onu_id:
+                continue
+
+            self.poutput('Installing flows for ONU ID: {}, UNI Port:{}'.format(uni_onu_id, uni_port_no))
+
+            # Upstream flow 1 for priority tagged case
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=1000,
+                    match_fields=[
+                        in_port(uni_port_no),
+                        metadata(default_speed),
+                        vlan_vid(4096 + 0)
+                    ],
+                    actions=[
+                        set_field(vlan_vid(4096 + c_vid))
+                    ],
+                    next_table_id=1
+                )
+            ))
+            # Upstream flow 2 for s-tag
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=1000,
+                    table_id=1,
+                    match_fields=[
+                        in_port(uni_port_no),
+                        metadata(default_speed),
+                        vlan_vid(4096 + c_vid)
+                    ],
+                    actions=[
+                        push_vlan(0x8100),
+                        set_field(vlan_vid(4096 + s_vid)),
+                        output(nni_port_no)
+                    ]
+                )
+            ))
+            #######################################################
+            # Downstream flow 1
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=1000,
+                    match_fields=[
+                        in_port(nni_port_no),
+                        metadata((default_speed << (12 + 32)) | c_vid << 32 | uni_port_no),
+                        vlan_vid(4096 + s_vid),
+                    ],
+                    actions=[pop_vlan()],
+                    next_table_id=1
+                )
+            ))
+            # Downstream flow 2
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    priority=1000,
+                    table_id=1,
+                    match_fields=[
+                        in_port(nni_port_no),
+                        vlan_vid(4096 + c_vid)
+                    ],
+                    actions=[
+                        pop_vlan(),
+                        output(uni_port_no)
+                    ]
+                )
+            ))
+            self.poutput('success')
+            found = True
+
+        if not found:
+            self.poutput('[ERROR] ONU with ID of {} not found'.format(onu_id))
+
+    complete_install_tf_flows = VolthaCli.complete_logical_device
+
+    @options([
+        make_option('-o', '--onu-id', action="store", dest='onu_id', help="ONU ID - Required", default=0),
+        make_option('-s', '--sTag', action='store', dest='s_vid', help="sVID (1..4093) - Required", default=None),
+        make_option('-c', '--cTag', action='store', dest='c_vid', help="sVID (1..4093) - Required", default=None)
+    ])
+    def do_delete_tf_flows(self, line, opts):
+        """
+        Remove a set of flows for a given ONU
+        """
+        usage = '   usage: delete_tf_flows -o <ONU-ID> -s <s-vid> -c <c-vid> [logical-device-id]'
+        onu_id = int(opts.onu_id) if opts.onu_id is not None else None
+        if onu_id is None or not (0 <= onu_id <= self.max_onu_id):
+            self.poutput('Invalid ONU ID {}. Must be 0..{}'.format(onu_id, self.max_onu_id))
+            self.poutput(usage)
+            return
+
+        s_vid = int(opts.s_vid) if opts.s_vid is not None else None
+        if s_vid is None or not (1 <= s_vid <= 4093):
+            self.poutput('Invalid S-VLAN ID {}. Must be 1..4093'.format(s_vid))
+            self.poutput(usage)
+            return
+
+        c_vid = int(opts.c_vid) if opts.c_vid is not None else None
+        if c_vid is None or not (1 <= s_vid <= 4093):
+            self.poutput('Invalid C-VLAN ID {}. Must be 1..4093'.format(c_vid))
+            self.poutput(usage)
+            return
+
+        logical_device_id = line or self.default_logical_device_id
+        if logical_device_id is None:
+            self.poutput('Logical Device ID not provided')
+            self.poutput(usage)
+            return
+
+        # gather NNI and UNI port IDs
+        nni_port_no, unis = self.get_logical_ports_and_onu_ids(logical_device_id)
+        default_speed = self.default_speed
+        found = False
+        stub = self.get_stub()
+
+        for uni_port_no, uni_onu_id in unis:
+            if uni_onu_id != onu_id:
+                continue
+
+            self.poutput('Deleting flows for ONU ID: {}, UNI Port:{}'.format(uni_onu_id, uni_port_no))
+
+            # Upstream flow 1 for priority tagged case
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    command=ofp.OFPFC_DELETE_STRICT,
+                    priority=1000,
+                    match_fields=[
+                        in_port(uni_port_no),
+                        metadata(default_speed),
+                        vlan_vid(4096 + 0)
+                    ],
+                    actions=[]
+                )
+            ))
+            # Downstream flow 1
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    command=ofp.OFPFC_DELETE_STRICT,
+                    priority=1000,
+                    match_fields=[
+                        in_port(nni_port_no),
+                        metadata((default_speed << (12 + 32)) | c_vid << 32 | uni_port_no),
+                        vlan_vid(4096 + s_vid),
+                    ],
+                    actions=[]
+                )
+            ))
+            #######################################################
+            # Upstream flow 2 for s-tag
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    command=ofp.OFPFC_DELETE_STRICT,
+                    priority=1000,
+                    table_id=1,
+                    match_fields=[
+                        in_port(uni_port_no),
+                        metadata(default_speed),
+                        vlan_vid(4096 + c_vid)
+                    ],
+                    actions=[]
+                )
+            ))
+            # Downstream flow 2
+            stub.UpdateLogicalDeviceFlowTable(FlowTableUpdate(
+                id=logical_device_id,
+                flow_mod=mk_simple_flow_mod(
+                    command=ofp.OFPFC_DELETE_STRICT,
+                    priority=1000,
+                    table_id=1,
+                    match_fields=[
+                        in_port(nni_port_no),
+                        vlan_vid(4096 + c_vid)
+                    ],
+                    actions=[]
+                )
+            ))
+            self.poutput('success')
+            found = True
+
+        if not found:
+            self.poutput('[ERROR] ONU with ID of {} not found'.format(onu_id))
+
+    complete_delete_tf_flows = VolthaCli.complete_logical_device
+
 
 if __name__ == '__main__':
 

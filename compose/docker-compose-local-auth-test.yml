@@ -33,37 +33,22 @@ services:
 
 
  onos:
-  image: "${REGISTRY}${REPOSITORY}voltha-onos:latest"
+  image: "voltha-onos:latest"
+  #image: "local-onos:local-apps"
   ports:
    - "8101:8101" # ssh
-   - "6653:6653" # OF
+   - "6653:6653" # OF - TLS
    - "6633:6633" # OF
    - "6640:6640" # OVSDB
    - "8181:8181" # UI
-   - "5005:5005" # Debugger
+   - "9876:9876" # ???
+   - "5005:5005" # Intelli-J Idea debugging
   environment:
    ONOS_APPS: 'drivers,openflow-base'
+   KARAF_DEBUG: 1
   networks:
     authnet:
      ipv4_address: 172.25.0.200
-
-# onos_config_push:
-#  image: "${REGISTRY}${REPOSITORY}voltha-config-push:${TAG:-latest}"
-#  environment:
-#   ONOS_CONNECTION: 'onos:8181'
-#  volumes:
-#   - "../docker/config/netcfg.json:/data/onos-config.json"
-#  networks:
-#   authnet:
-#  links:
-#   - "onos:onos"
-
-# freeradius-test:
-#  image: "${REGISTRY}marcelmaatkamp/freeradius:${RADIUS_TAG:-latest}"
-#  command: "radtest user password freeradius 0 SECRET"
-#  networks:
-#   authnet:
-#    ipv4_address: 172.25.0.101
 
 networks:
   authnet:
