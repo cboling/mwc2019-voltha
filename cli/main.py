@@ -39,6 +39,31 @@ from voltha.protos import third_party
 from voltha.protos import voltha_pb2
 from voltha.protos.openflow_13_pb2 import FlowTableUpdate, FlowGroupTableUpdate
 
+
+try:
+    REMOTE_DBG_HOST = '192.168.0.20'
+    # REMOTE_DBG_HOST = '10.0.2.15'
+
+    # sys.path.append('/cli/cli/pydevd/pydevd-pycharm.egg')
+    # import pydevd_pycharm
+    # Initial breakpoint
+    # pydevd_pycharm.settrace(REMOTE_DBG_HOST, port=8765, stdoutToServer=True, stderrToServer=True, suspend=False)
+
+except ImportError:
+    print('Error importing pydevd package.')
+    print('REMOTE DEBUGGING will not be supported in this run...')
+    # Continue on, you do not want to completely kill VOLTHA, you just need to fix it.
+
+except AttributeError:
+    print('Attribute error. Perhaps try to explicitly set PYTHONPATH to'
+          'pydevd directory and run again?')
+    print('REMOTE DEBUGGING will not be supported in this run...')
+    # Continue on, you do not want to completely kill VOLTHA, you just need to fix it.
+
+except:
+    print("pydevd startup exception: %s" % sys.exc_info()[0])
+    print('REMOTE DEBUGGING will not be supported in this run...')
+
 _ = third_party
 from cli.utils import pb2dict
 
